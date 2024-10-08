@@ -38,7 +38,7 @@ def load_and_stack_slices(input_folder, output_folder):
         # Stack slices along the third dimension to create a volume
         volume = np.stack(slices, axis=0)
 
-        # Convert the numpy array to SimpleITK Image
+      
         volume_sitk = sitk.GetImageFromArray(volume)
 
         # Save the volume as .mha file
@@ -47,7 +47,7 @@ def load_and_stack_slices(input_folder, output_folder):
         print(f"Saved {output_filename} to {output_folder}")
 
 # Example usage
-input_folder = '/mnt/pan/Data7/axs2220/nnUNet_aisc/nnUNetFrame/dataset/nnUNet_raw/nnUNet_raw_data/BoundingBox'  # Replace with your input folder path
-output_folder = '/mnt/pan/Data7/axs2220/nnUNet_aisc/nnUNetFrame/dataset/nnUNet_raw/nnUNet_raw_data/Dataset004_BoundingBoxFistula/nnUNet_Cropped'  # Replace with your output folder path
+input_folder = 'Input Folder'  
+output_folder = 'Output Folder'  
 load_and_stack_slices(input_folder, output_folder)
 
