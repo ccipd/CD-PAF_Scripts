@@ -54,7 +54,7 @@ def add_bbox(mask2d, im2d, output_path):
     return num_features, bounding_boxes
 
 # Output
-output_folder = Path("/mnt/pan/Data7/axs2220/nnUNet_aisc/nnUNetFrame/dataset/nnUNet_raw/nnUNet_raw_data/BoundingBox")
+output_folder = Path("Output Folder Path")
 output_folder.mkdir(exist_ok=True)
 
 # For all Images
