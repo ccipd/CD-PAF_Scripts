@@ -1,97 +1,116 @@
-from pathlib import Path
+"""""
+The following code generates one large bounding box given that there are 3 regions of interests 
+The bounding boxes are generated using the ground truth label
+""""
+
+import os
 import SimpleITK as sitk
 import numpy as np
-import matplotlib.pyplot as plt
-import torch
-from scipy.ndimage import label, find_objects
-import os
+from skimage.measure import regionprops, label
 
-# import libraries
-import pandas as pd
-
-import torch
-from scipy.ndimage import label, center_of_mass, find_objects
-
-
-# Path
-image_path_base = Path("Enter Image path")
-mask_path_base = Path("Enter Labels Path")
-
-# Mohsen + Pytoch + Claude
-def add_bbox(mask2d, im2d, output_path):
+def generate_bounding_boxes(image_folder, label_folder, output_folder):
     """
-    Add bounding boxes to an image based on a mask and save the result.
-
-    Args:
-        mask2d (np.array): A 2D binary mask which includes all the areas.
-        im2d (np.array): A 2D image.
-        output_path (str): Path to save the output image.
-
-    Returns:
-        int: The number of areas.
-        list: The bounding boxes of the areas.
+    Generate bounding boxes for three regions per slice in 3D MHA images.
+    
+    :param image_folder: Path to the folder containing input 3D MHA image files
+    :param label_folder: Path to the folder containing input 3D MHA label files
+    :param output_folder: Path to the folder to save output 3D MHA images with bounding boxes
     """
-    if isinstance(mask2d, torch.Tensor):
-        mask2d = mask2d.numpy()
-
-    labeled_mask, num_features = label(mask2d, structure=np.ones((3, 3)))
-    bounding_boxes = find_objects(labeled_mask)
-
-    if num_features > 0:
-        plt.figure(figsize=(10, 10))
-        plt.imshow(im2d, cmap='gray')
-        plt.contour(mask2d, levels=[0.5], colors='g')
-
-        for bbox in bounding_boxes:
-            y_min, y_max = bbox[0].start, bbox[0].stop
-            x_min, x_max = bbox[1].start, bbox[1].stop
-            plt.gca().add_patch(plt.Rectangle((x_min, y_min), x_max - x_min, y_max - y_min, 
-                                              edgecolor='red', facecolor='none', linewidth=2))
+    os.makedirs(output_folder, exist_ok=True)
+    
+    image_files = [f for f in os.listdir(image_folder) if f.endswith('.mha')]
+    label_files = [f for f in os.listdir(label_folder) if f.endswith('.mha')]
+    
+    for image_file in image_files:
+        image_base = '_'.join(image_file.split('_')[:-1])
+        label_file = next((l for l in label_files if l.startswith(image_base)), None)
         
-        plt.savefig(output_path)
-        plt.close()
-
-    return num_features, bounding_boxes
-
-# Output
-output_folder = Path("Output Folder Path")
-output_folder.mkdir(exist_ok=True)
-
-# For all Images
-for image_path in image_path_base.glob("*.mha"):
-    mask_path = Path('_'.join(image_path.stem.split("_")[:-1])).with_suffix(".mha")
-    mask_path = mask_path_base / mask_path
-
-    image = sitk.ReadImage(str(image_path))
-    mask = sitk.ReadImage(str(mask_path))
-    image = sitk.GetArrayFromImage(image)
-    mask = sitk.GetArrayFromImage(mask)
-
-    # Process each slice of the 3D image
-    for slice_index in range(image.shape[0]):
-        mask_slice = mask[slice_index]
+        if label_file is None:
+            print(f"No corresponding label found for {image_file}. Skipping.")
+            continue
         
-        # Check if the slice has any mask
-        if np.any(mask_slice):
-            mask1 = mask_slice.copy()
-            mask2 = mask_slice.copy()
-            mask3 = mask_slice.copy()
+        image_path = os.path.join(image_folder, image_file)
+        label_path = os.path.join(label_folder, label_file)
+        output_path = os.path.join(output_folder, f"bbox_{image_file}")
+        
+        image = sitk.ReadImage(image_path)
+        mask = sitk.ReadImage(label_path)
+        
+        image_array = sitk.GetArrayFromImage(image)
+        mask_array = sitk.GetArrayFromImage(mask)
+        
+        print(f"Image shape: {image_array.shape}, Number of channels: {image_array.shape[-1] if len(image_array.shape) > 3 else 1}")
+        print(f"Mask shape: {mask_array.shape}, Number of channels: {mask_array.shape[-1] if len(mask_array.shape) > 3 else 1}")
+        
+        bbox_image = image_array.copy()
+        
+        for z in range(image_array.shape[0]):  
+            if z >= mask_array.shape[0]:
+                break
+            slice_mask = mask_array[z]
+            labeled_mask = label(slice_mask)
+            regions = regionprops(labeled_mask)
+            
+            if not regions:
+                continue  # Skip this slice if no regions found
+            
+            # Find the largest bounding box for this slice
+            min_r, min_c = float('inf'), float('inf')
+            max_r, max_c = float('-inf'), float('-inf')
+            
+            for region in regions:
+                minr, minc, maxr, maxc = region.bbox
+                min_r = min(min_r, minr)
+                min_c = min(min_c, minc)
+                max_r = max(max_r, maxr)
+                max_c = max(max_c, maxc)
+            
+            # Draw the largest bounding box for this slice
+            bbox_image[z, min_r, min_c:max_c] = np.max(image_array)  # Top edge
+            bbox_image[z, max_r-1, min_c:max_c] = np.max(image_array)  # Bottom edge
+            bbox_image[z, min_r:max_r, min_c] = np.max(image_array)  # Left edge
+            bbox_image[z, min_r:max_r, max_c-1] = np.max(image_array)  # Right edge
+        
+        bbox_sitk = sitk.GetImageFromArray(bbox_image)
+        bbox_sitk.CopyInformation(image)
+        
+        sitk.WriteImage(bbox_sitk, output_path)
+        
+        print(f"Processed {image_file}")
 
-            mask1[mask1 == 2] = 0
-            mask1[mask1 == 3] = 0
 
-            mask2[mask2 == 1] = 0
-            mask2[mask2 == 3] = 0
+def print_image_info(image_folder, label_folder):
+    """
+    Print information about the number of channels in the images and labels.
+    
+    :param image_folder: Path to the folder containing input 3D MHA image files
+    :param label_folder: Path to the folder containing input 3D MHA label files
+    """
+    image_files = [f for f in os.listdir(image_folder) if f.endswith('.mha')]
+    label_files = [f for f in os.listdir(label_folder) if f.endswith('.mha')]
+    
+    for image_file in image_files:
+        image_base = '_'.join(image_file.split('_')[:-1])
+        label_file = next((l for l in label_files if l.startswith(image_base)), None)
+        
+        if label_file is None:
+            print(f"No corresponding label found for {image_file}. Skipping.")
+            continue
+        
+        image_path = os.path.join(image_folder, image_file)
+        label_path = os.path.join(label_folder, label_file)
+        
+        image = sitk.ReadImage(image_path)
+        mask = sitk.ReadImage(label_path)
+        
+        image_array = sitk.GetArrayFromImage(image)
+        mask_array = sitk.GetArrayFromImage(mask)
+        
+        print(f"File: {image_file}")
+        print(f"Image shape: {image_array.shape}, Number of channels: {image_array.shape[-1] if len(image_array.shape) > 3 else 1}")
+        print(f"Mask shape: {mask_array.shape}, Number of channels: {mask_array.shape[-1] if len(mask_array.shape) > 3 else 1}")
+        print()
 
-            mask3[mask3 == 1] = 0
-            mask3[mask3 == 2] = 0
-
-            # Generate and save bounding boxes for each mask
-            for mask_index, mask_slice in enumerate([mask1, mask2, mask3]):
-                if np.any(mask_slice):
-                    output_path = output_folder / f"{image_path.stem}_slice{slice_index}_mask{mask_index+1}.png"
-                    num_features, _ = add_bbox(mask_slice, image[slice_index], str(output_path))
-                    if num_features > 0:
-                        print(f"Processed: {image_path.name}, Slice: {slice_index}, Mask: {mask_index+1}")
-
-print("All images processed. Results saved in:", output_folder)
+# Example usage:
+#generate_bounding_boxes("Image File Path", "Label_File Path", "Output_File Path")
+#print_image_info("Image_File Path", "Label_File Path")
