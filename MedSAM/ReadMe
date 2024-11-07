@@ -1,2 +1,11 @@
-Note: MedSam cannot only segment one structure at a time - hence make sure that the main.py file shows the specific structure you need
+Note: MedSam cannot only segment one structure at a time - hence make sure that the main.py file shows the specific structures you need so medsam can be called on each structure accordingly
+
+To set up a virtual environment for MedSAM:
+- Python version 3.10 only (THIS IS VERY IMPORTANT - PYTORCH NOT STABLE OTHERWISE)
+
+How to do this on HPC:
+>> module spider python
+>> module load Python/3.10
+>> python3.10 -m medSAM
+>> source medSAM/bin/activate
 
