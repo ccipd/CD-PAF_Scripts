@@ -9,3 +9,4 @@ How to do this on HPC:
 >> python3.10 -m medSAM
 >> source medSAM/bin/activate
 
+Output are 4 .mha probability maps: labels [0,1,2,3] and a combined label image which is a multi-component image
